@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDH SRM Demo - 供应商关系管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #3b82f6;
+            --primary-dark: #2563eb;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --info-color: #3b82f6;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--gray-50);
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: white;
+            border-bottom: 1px solid var(--gray-200);
+            padding: 16px 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .logo-text h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .logo-text p {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* Navigation */
+        nav {
+            background: white;
+            border-bottom: 1px solid var(--gray-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 4px;
+            overflow-x: auto;
+        }
+
+        nav li a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            color: var(--gray-600);
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+
+        nav li a:hover {
+            color: var(--primary-color);
+            background: var(--gray-50);
+        }
+
+        nav li a.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        /* Main Content */
+        main {
+            padding: 24px 0;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        /* Dashboard */
+        .welcome-banner {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .welcome-banner h2 {
+            font-size: 20px;
+            margin-bottom: 4px;
+        }
+
+        .welcome-banner p {
+            color: var(--gray-600);
+            font-size: 14px;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .stat-icon.blue { background: #dbeafe; }
+        .stat-icon.green { background: #d1fae5; }
+        .stat-icon.orange { background: #fed7aa; }
+        .stat-icon.purple { background: #e9d5ff; }
+
+        .stat-info h3 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .stat-info p {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        .stat-change {
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .stat-change.up { color: var(--success-color); }
+        .stat-change.down { color: var(--danger-color); }
+
+        /* Tables */
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .table-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: var(--gray-50);
+        }
+
+        th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-600);
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--gray-200);
+            font-size: 14px;
+        }
+
+        /* Status Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge.success { background: #d1fae5; color: #065f46; }
+        .badge.warning { background: #fef3c7; color: #92400e; }
+        .badge.danger { background: #fee2e2; color: #991b1b; }
+        .badge.info { background: #dbeafe; color: #1e40af; }
+        .badge.primary { background: #e0e7ff; color: #3730a3; }
+
+        /* Progress Bar */
+        .progress-bar {
+            height: 6px;
+            background: var(--gray-200);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary-color);
+            transition: width 0.3s;
+        }
+
+        /* Alerts */
+        .alerts {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: start;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .alert-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .alert-item.danger { background: #fef2f2; border-left: 3px solid var(--danger-color); }
+        .alert-item.warning { background: #fffbeb; border-left: 3px solid var(--warning-color); }
+        .alert-item.info { background: #eff6ff; border-left: 3px solid var(--info-color); }
+        .alert-item.success { background: #f0fdf4; border-left: 3px solid var(--success-color); }
+
+        .alert-icon {
+            font-size: 16px;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-content p {
+            font-size: 14px;
+        }
+
+        .alert-time {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            color: var(--gray-600);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="container">
+            <div class="logo">
+                <div class="logo-icon">CDH</div>
+                <div class="logo-text">
+                    <h1>SRM 系统</h1>
+                    <p>供应商关系管理系统</p>
+                </div>
+            </div>
+            <div class="user-info">
+                <span>张伟</span>
+                <div class="user-avatar">张</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <ul>
+                <li><a href="#" class="active" onclick="showSection('dashboard')">📊 工作台</a></li>
+                <li><a href="#" onclick="showSection('orders')">📦 订单协同</a></li>
+                <li><a href="#" onclick="showSection('outsourcing')">🏭 委外管理</a></li>
+                <li><a href="#" onclick="showSection('asn')">🚚 送货管理</a></li>
+                <li><a href="#" onclick="showSection('molds')">🔧 模具管理</a></li>
+                <li><a href="#" onclick="showSection('suppliers')">🏢 供应商管理</a></li>
+                <li><a href="#" onclick="showSection('sourcing')">💼 寻源管理</a></li>
+                <li><a href="#" onclick="showSection('finance')">💰 财务对账</a></li>
+                <li><a href="#" onclick="showSection('contracts')">📄 合同管理</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section active">
+            <div class="welcome-banner">
+                <h2>欢迎回来，张伟</h2>
+                <p>以下是今日供应链运营概况</p>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue">📦</div>
+                    <div class="stat-info">
+                        <h3>128</h3>
+                        <p>在途订单</p>
+                        <span class="stat-change up">↑ +12% 较上月</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange">⏳</div>
+                    <div class="stat-info">
+                        <h3>23</h3>
+                        <p>待确认订单</p>
+                        <span class="stat-change down">↓ -5% 较上月</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">🏭</div>
+                    <div class="stat-info">
+                        <h3>¥2.85M</h3>
+                        <p>本月入库</p>
+                        <span class="stat-change up">↑ +18% 较上月</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon purple">🤝</div>
+                    <div class="stat-info">
+                        <h3>67</h3>
+                        <p>活跃供应商</p>
+                        <span class="stat-change up">↑ +3 较上月</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alerts -->
+            <div class="alerts">
+                <div class="alert-item danger">
+                    <div class="alert-icon">🔴</div>
+                    <div class="alert-content">
+                        <p>供应商「佛山精密铸造」资质证书将于 3 天后过期</p>
+                        <span class="alert-time">10分钟前</span>
+                    </div>
+                </div>
+                <div class="alert-item warning">
+                    <div class="alert-icon">🟡</div>
+                    <div class="alert-content">
+                        <p>模具 M-2026-008 已达设计寿命 92%，请安排保养</p>
+                        <span class="alert-time">1小时前</span>
+                    </div>
+                </div>
+                <div class="alert-item info">
+                    <div class="alert-icon">🔵</div>
+                    <div class="alert-content">
+                        <p>PO-2026-0312 已发货，预计明日到货</p>
+                        <span class="alert-time">2小时前</span>
+                    </div>
+                </div>
+                <div class="alert-item success">
+                    <div class="alert-icon">🟢</div>
+                    <div class="alert-content">
+                        <p>本月对账单已生成，待供应商确认</p>
+                        <span class="alert-time">3小时前</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Orders Table -->
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>近期订单</h3>
+                    <button class="btn btn-primary btn-sm">查看全部</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>订单号</th>
+                            <th>供应商</th>
+                            <th>物料</th>
+                            <th>数量</th>
+                            <th>状态</th>
+                            <th>进度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>PO-2026-0315</td>
+                            <td>佛山精密铸造</td>
+                            <td>304不锈钢锅体</td>
+                            <td>5,000</td>
+                            <td><span class="badge warning">生产中</span></td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 65%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>PO-2026-0312</td>
+                            <td>东莞金属制品</td>
+                            <td>铝合金手柄</td>
+                            <td>12,000</td>
+                            <td><span class="badge info">已发货</span></td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 85%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>PO-2026-0308</td>
+                            <td>中山模具科技</td>
+                            <td>硅胶密封圈</td>
+                            <td>30,000</td>
+                            <td><span class="badge success">已入库</span></td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 100%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>PO-2026-0305</td>
+                            <td>广州包装材料</td>
+                            <td>彩盒包装</td>
+                            <td>8,000</td>
+                            <td><span class="badge primary">待确认</span></td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 10%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>PO-2026-0301</td>
+                            <td>深圳电子元件</td>
+                            <td>温控传感器</td>
+                            <td>2,000</td>
+                            <td><span class="badge info">质检中</span></td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 92%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Orders Section -->
+        <section id="orders" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>订单协同</h3>
+                    <p>管理 U8 同步的采购订单与委外订单，跟踪供应商确认与执行状态。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>订单数据加载中...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Outsourcing Section -->
+        <section id="outsourcing" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>委外管理</h3>
+                    <p>委外物料虚拟仓库存管理，BOM 驱动发料与物料核销差异分析。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>委外数据加载中...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ASN Section -->
+        <section id="asn" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>送货管理 (ASN)</h3>
+                    <p>发货通知单管理，标签打印与扫码收货。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>ASN数据加载中...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Molds Section -->
+        <section id="molds" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>模具管理</h3>
+                    <p>模具全生命周期管理，一模一码追溯，智能保养预警。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>模具数据加载中...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Suppliers Section -->
+        <section id="suppliers" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>供应商管理</h3>
+                    <p>供应商全生命周期管理，准入审核、资质预警与 360° 画像。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>供应商数据加载中...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sourcing Section -->
+        <section id="sourcing" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>寻源管理</h3>
+                    <p>询比价、在线招标与成本构成分析，实现价格透明可审计。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>寻源数据加载中...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Finance Section -->
+        <section id="finance" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>财务对账</h3>
+                    <p>自动对账、三单匹配、发票管理与付款申请。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>财务数据加载中...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contracts Section -->
+        <section id="contracts" class="section">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3>合同管理</h3>
+                    <p>合同模板管理、在线审批与电子签章集成。</p>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>合同数据加载中...</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.remove('active');
+            });
+
+            // Remove active class from all nav links
+            document.querySelectorAll('nav a').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+
+            // Add active class to clicked link
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
