@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { FileCheck, DollarSign, Clock, CheckCircle, LayoutGrid, List, Eye, Download, Upload, X, AlertCircle } from 'lucide-vue-next'
+import { ref, onMounted, computed } from 'vue'
+import { FileCheck, DollarSign, Clock, CheckCircle, LayoutGrid, List, Eye, Download, Upload, X, AlertCircle, Plus } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/useAppStore'
 
 const appStore = useAppStore()
@@ -20,6 +20,15 @@ const payments = ref<any[]>([])
 const selectedReconciliation = ref<any>(null)
 const isReconDetailOpen = ref(false)
 
+// 新增对账单对话框
+const isCreateReconOpen = ref(false)
+const newReconciliation = ref({
+  supplierId: '',
+  period: '',
+  orderCount: 0,
+  totalAmount: 0,
+})
+
 // 发票上传对话框
 const isInvoiceUploadOpen = ref(false)
 const newInvoice = ref({
@@ -35,6 +44,15 @@ const newInvoice = ref({
 const isPaymentDialogOpen = ref(false)
 const selectedPaymentRecon = ref<any>(null)
 
+// 对账期间选项
+const periodOptions = [
+  '2026年1月',
+  '2026年2月',
+  '2026年3月',
+  '2026年4月',
+  '2026年5月',
+]
+
 // 加载数据
 onMounted(() => {
   // 加载对账单数据
@@ -43,16 +61,10 @@ onMounted(() => {
     try {
       reconciliations.value = JSON.parse(savedRecon)
     } catch {
-      reconciliations.value = [
-        { id: 'RC001', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', period: '2026年3月', orderCount: 5, totalAmount: 285000, paidAmount: 150000, unpaidAmount: 135000, status: '待确认' },
-        { id: 'RC002', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', period: '2026年3月', orderCount: 3, totalAmount: 156000, paidAmount: 156000, unpaidAmount: 0, status: '已完成' },
-      ]
+      loadDefaultReconciliations()
     }
   } else {
-    reconciliations.value = [
-      { id: 'RC001', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', period: '2026年3月', orderCount: 5, totalAmount: 285000, paidAmount: 150000, unpaidAmount: 135000, status: '待确认' },
-      { id: 'RC002', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', period: '2026年3月', orderCount: 3, totalAmount: 156000, paidAmount: 156000, unpaidAmount: 0, status: '已完成' },
-    ]
+    loadDefaultReconciliations()
   }
 
   // 加载发票数据
@@ -61,14 +73,10 @@ onMounted(() => {
     try {
       invoices.value = JSON.parse(savedInvoices)
     } catch {
-      invoices.value = [
-        { id: 'INV001', invoiceNo: '44030001', supplier: '深圳市精诚模具制造有限公司', amount: 285000, taxAmount: 36225, totalAmount: 321225, invoiceDate: '2026-03-15', status: '已上传' },
-      ]
+      loadDefaultInvoices()
     }
   } else {
-    invoices.value = [
-      { id: 'INV001', invoiceNo: '44030001', supplier: '深圳市精诚模具制造有限公司', amount: 285000, taxAmount: 36225, totalAmount: 321225, invoiceDate: '2026-03-15', status: '已上传' },
-    ]
+    loadDefaultInvoices()
   }
 
   // 加载付款记录
@@ -77,24 +85,114 @@ onMounted(() => {
     try {
       payments.value = JSON.parse(savedPayments)
     } catch {
-      payments.value = [
-        { id: 'PAY001', supplier: '东莞市华泰五金制品厂', amount: 156000, paymentDate: '2026-03-18', status: '已付款', method: '银行转账' },
-      ]
+      loadDefaultPayments()
     }
   } else {
-    payments.value = [
-      { id: 'PAY001', supplier: '东莞市华泰五金制品厂', amount: 156000, paymentDate: '2026-03-18', status: '已付款', method: '银行转账' },
-    ]
+    loadDefaultPayments()
   }
 })
 
-const totalUnpaid = reconciliations.value.reduce((sum, r) => sum + r.unpaidAmount, 0)
-const totalPaid = reconciliations.value.reduce((sum, r) => sum + r.paidAmount, 0)
+// 加载默认对账单数据
+function loadDefaultReconciliations() {
+  reconciliations.value = [
+    { id: 'RC001', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', period: '2026年3月', orderCount: 5, totalAmount: 285000, paidAmount: 150000, unpaidAmount: 135000, status: '待确认', createDate: '2026-03-01' },
+    { id: 'RC002', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', period: '2026年3月', orderCount: 3, totalAmount: 156000, paidAmount: 156000, unpaidAmount: 0, status: '已完成', createDate: '2026-03-02' },
+    { id: 'RC003', supplier: '佛山市永盛铝制品有限公司', supplierId: 'S003', period: '2026年3月', orderCount: 8, totalAmount: 428000, paidAmount: 200000, unpaidAmount: 228000, status: '已推送', createDate: '2026-03-05' },
+    { id: 'RC004', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', period: '2026年2月', orderCount: 6, totalAmount: 356000, paidAmount: 356000, unpaidAmount: 0, status: '已完成', createDate: '2026-02-28' },
+    { id: 'RC005', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', period: '2026年2月', orderCount: 4, totalAmount: 198000, paidAmount: 100000, unpaidAmount: 98000, status: '已完成', createDate: '2026-02-25' },
+    { id: 'RC006', supplier: '佛山市永盛铝制品有限公司', supplierId: 'S003', period: '2026年2月', orderCount: 7, totalAmount: 512000, paidAmount: 512000, unpaidAmount: 0, status: '已完成', createDate: '2026-02-26' },
+    { id: 'RC007', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', period: '2026年1月', orderCount: 4, totalAmount: 228000, paidAmount: 228000, unpaidAmount: 0, status: '已完成', createDate: '2026-01-30' },
+    { id: 'RC008', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', period: '2026年1月', orderCount: 5, totalAmount: 265000, paidAmount: 200000, unpaidAmount: 65000, status: '已完成', createDate: '2026-01-28' },
+  ]
+  saveReconciliations()
+}
+
+// 加载默认发票数据
+function loadDefaultInvoices() {
+  invoices.value = [
+    { id: 'INV001', invoiceNo: '44030001', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', amount: 285000, taxAmount: 36225, totalAmount: 321225, invoiceDate: '2026-03-15', status: '已上传' },
+    { id: 'INV002', invoiceNo: '44030002', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', amount: 156000, taxAmount: 19890, totalAmount: 175890, invoiceDate: '2026-03-16', status: '已上传' },
+    { id: 'INV003', invoiceNo: '44030003', supplier: '佛山市永盛铝制品有限公司', supplierId: 'S003', amount: 428000, taxAmount: 54540, totalAmount: 482540, invoiceDate: '2026-03-18', status: '已上传' },
+    { id: 'INV004', invoiceNo: '44020001', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', amount: 356000, taxAmount: 45260, totalAmount: 401260, invoiceDate: '2026-02-20', status: '已上传' },
+  ]
+  saveInvoices()
+}
+
+// 加载默认付款记录
+function loadDefaultPayments() {
+  payments.value = [
+    { id: 'PAY001', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', amount: 156000, paymentDate: '2026-03-18', status: '已付款', method: '银行转账' },
+    { id: 'PAY002', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', amount: 356000, paymentDate: '2026-02-28', status: '已付款', method: '银行转账' },
+    { id: 'PAY003', supplier: '佛山市永盛铝制品有限公司', supplierId: 'S003', amount: 512000, paymentDate: '2026-02-27', status: '已付款', method: '银行转账' },
+    { id: 'PAY004', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', amount: 200000, paymentDate: '2026-03-20', status: '已付款', method: '银行转账' },
+    { id: 'PAY005', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', amount: 150000, paymentDate: '2026-03-15', status: '已付款', method: '银行转账' },
+    { id: 'PAY006', supplier: '佛山市永盛铝制品有限公司', supplierId: 'S003', amount: 200000, paymentDate: '2026-03-10', status: '已付款', method: '银行转账' },
+  ]
+  savePayments()
+}
+
+// 保存数据到 localStorage
+function saveReconciliations() {
+  localStorage.setItem('finance_reconciliations', JSON.stringify(reconciliations.value))
+}
+
+function saveInvoices() {
+  localStorage.setItem('finance_invoices', JSON.stringify(invoices.value))
+}
+
+function savePayments() {
+  localStorage.setItem('finance_payments', JSON.stringify(payments.value))
+}
+
+const totalUnpaid = computed(() => reconciliations.value.reduce((sum, r) => sum + r.unpaidAmount, 0))
+const totalPaid = computed(() => reconciliations.value.reduce((sum, r) => sum + r.paidAmount, 0))
 
 // 查看对账单明细
 function handleViewReconDetail(recon: any) {
   selectedReconciliation.value = recon
   isReconDetailOpen.value = true
+}
+
+// 新增对账单
+function handleCreateReconciliation() {
+  if (!newReconciliation.value.supplierId) {
+    appStore.showToast('请选择供应商', 'warning')
+    return
+  }
+  if (!newReconciliation.value.period) {
+    appStore.showToast('请选择对账期间', 'warning')
+    return
+  }
+  if (!newReconciliation.value.orderCount || !newReconciliation.value.totalAmount) {
+    appStore.showToast('请填写完整信息', 'warning')
+    return
+  }
+
+  const supplier = suppliers.find(s => s.id === newReconciliation.value.supplierId)
+  const recon = {
+    id: `RC${Date.now()}`,
+    supplier: supplier?.name || '',
+    supplierId: newReconciliation.value.supplierId,
+    period: newReconciliation.value.period,
+    orderCount: newReconciliation.value.orderCount,
+    totalAmount: newReconciliation.value.totalAmount,
+    paidAmount: 0,
+    unpaidAmount: newReconciliation.value.totalAmount,
+    status: '待确认',
+    createDate: new Date().toISOString().split('T')[0],
+  }
+
+  reconciliations.value.unshift(recon)
+  saveReconciliations()
+
+  appStore.showToast('对账单创建成功', 'success')
+  isCreateReconOpen.value = false
+  newReconciliation.value = {
+    supplierId: '',
+    period: '',
+    orderCount: 0,
+    totalAmount: 0,
+  }
 }
 
 // 下载对账单
@@ -111,7 +209,7 @@ function handlePushToSupplier(recon: any) {
   const idx = reconciliations.value.findIndex(r => r.id === recon.id)
   if (idx > -1) {
     reconciliations.value[idx].status = '已推送'
-    localStorage.setItem('finance_reconciliations', JSON.stringify(reconciliations.value))
+    saveReconciliations()
     appStore.showToast(`已推送对账单至 ${recon.supplier}`, 'success')
   }
 }
@@ -129,6 +227,7 @@ function handleConfirmPayment() {
   const payment = {
     id: `PAY${Date.now()}`,
     supplier: selectedPaymentRecon.value.supplier,
+    supplierId: selectedPaymentRecon.value.supplierId,
     amount: selectedPaymentRecon.value.unpaidAmount,
     paymentDate: new Date().toISOString().split('T')[0],
     status: '已付款',
@@ -137,7 +236,7 @@ function handleConfirmPayment() {
 
   // 更新付款记录
   payments.value.unshift(payment)
-  localStorage.setItem('finance_payments', JSON.stringify(payments.value))
+  savePayments()
 
   // 更新对账单状态
   const idx = reconciliations.value.findIndex(r => r.id === selectedPaymentRecon.value.id)
@@ -145,7 +244,7 @@ function handleConfirmPayment() {
     reconciliations.value[idx].paidAmount += selectedPaymentRecon.value.unpaidAmount
     reconciliations.value[idx].unpaidAmount = 0
     reconciliations.value[idx].status = '已完成'
-    localStorage.setItem('finance_reconciliations', JSON.stringify(reconciliations.value))
+    saveReconciliations()
   }
 
   appStore.showToast('付款已成功发起', 'success')
@@ -180,7 +279,7 @@ function handleUploadInvoice() {
   const invoice = {
     id: `INV${Date.now()}`,
     invoiceNo: newInvoice.value.invoiceNo,
-    supplier: reconciliations.value.find(r => r.supplierId === newInvoice.value.supplierId)?.supplier || '',
+    supplier: suppliers.find(s => s.id === newInvoice.value.supplierId)?.name || '',
     supplierId: newInvoice.value.supplierId,
     amount: Number(newInvoice.value.amount),
     taxAmount: Number(newInvoice.value.taxAmount) || 0,
@@ -190,7 +289,7 @@ function handleUploadInvoice() {
   }
 
   invoices.value.unshift(invoice)
-  localStorage.setItem('finance_invoices', JSON.stringify(invoices.value))
+  saveInvoices()
 
   appStore.showToast('发票上传成功', 'success')
   isInvoiceUploadOpen.value = false
@@ -250,7 +349,10 @@ const suppliers = [
       <div class="p-6">
         <!-- 对账单 -->
         <div v-if="activeTab === 'reconciliation'" class="space-y-4">
-          <div class="flex justify-end">
+          <div class="flex justify-between items-center">
+            <button @click="isCreateReconOpen = true" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+              <Plus class="w-4 h-4" />新增对账单
+            </button>
             <div class="flex items-center border border-gray-300 rounded-lg p-1">
               <button
                 class="px-3 py-1.5 rounded-md text-sm flex items-center gap-1"
@@ -508,6 +610,60 @@ const suppliers = [
             <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
               <button @click="isInvoiceUploadOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
               <button @click="handleUploadInvoice" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">上传</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 新增对账单对话框 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="isCreateReconOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/50" @click="isCreateReconOpen = false" />
+          <div class="relative bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div class="flex items-center justify-between p-4 border-b">
+              <h3 class="text-lg font-semibold text-gray-900">新增对账单</h3>
+              <button @click="isCreateReconOpen = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+            <div class="p-6 space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">供应商</label>
+                <select v-model="newReconciliation.supplierId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">请选择供应商</option>
+                  <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">对账期间</label>
+                <select v-model="newReconciliation.period" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">请选择对账期间</option>
+                  <option v-for="p in periodOptions" :key="p" :value="p">{{ p }}</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">订单数量</label>
+                  <input v-model.number="newReconciliation.orderCount" type="number" min="1" placeholder="订单数量" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">对账总额（元）</label>
+                  <input v-model.number="newReconciliation.totalAmount" type="number" min="0" placeholder="对账总额" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div class="p-4 bg-blue-50 rounded-lg">
+                <div class="flex items-center gap-2 mb-2">
+                  <AlertCircle class="w-5 h-5 text-blue-600" />
+                  <h4 class="font-medium text-blue-900">提示</h4>
+                </div>
+                <p class="text-sm text-blue-800">新增对账单后，系统将自动生成对账单号，状态默认为"待确认"，可推送给供应商确认后发起付款。</p>
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
+              <button @click="isCreateReconOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button @click="handleCreateReconciliation" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">创建</button>
             </div>
           </div>
         </div>
