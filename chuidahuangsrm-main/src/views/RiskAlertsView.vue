@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { AlertTriangle, Clock, Filter, Search, ChevronRight, CheckCircle, XCircle, AlertCircle } from 'lucide-vue-next'
+import { AlertTriangle, Clock, Filter, Search, ChevronRight, CheckCircle, XCircle, AlertCircle, Plus, X, Bell } from 'lucide-vue-next'
 import { mockSuppliers, mockMolds } from '@/data/mockData'
 import { useAppStore } from '@/stores/useAppStore'
 
@@ -10,6 +10,21 @@ const appStore = useAppStore()
 
 const selectedTab = ref('all')
 const searchQuery = ref('')
+
+// 新建风险预警对话框
+const isCreateDialogOpen = ref(false)
+const newRiskAlert = ref({
+  type: 'cert' as RiskType,
+  level: 'medium' as RiskLevel,
+  title: '',
+  description: '',
+  supplierId: '',
+  notifyEmails: '',
+  dueDate: '',
+})
+
+// 手动添加的风险预警
+const manualRiskAlerts = ref<RiskAlert[]>([])
 
 // 风险类型定义
 type RiskLevel = 'high' | 'medium' | 'low'
@@ -28,6 +43,8 @@ interface RiskAlert {
   dueDate?: string
   createdAt: string
   status: 'pending' | 'processing' | 'resolved'
+  isManual?: boolean
+  notifyEmails?: string[]
 }
 
 // 生成风险预警数据
@@ -89,11 +106,102 @@ const riskAlerts = computed<RiskAlert[]>(() => {
     })
   })
 
+  // 添加手动创建的风险预警
+  manualRiskAlerts.value.forEach(alert => {
+    alerts.push(alert)
+  })
+
   return alerts.sort((a, b) => {
     const levelOrder = { high: 0, medium: 1, low: 2 }
     return levelOrder[a.level] - levelOrder[b.level]
   })
 })
+
+// 初始化加载手动添加的风险预警
+onMounted(() => {
+  const saved = localStorage.getItem('manual_risk_alerts')
+  if (saved) {
+    try {
+      manualRiskAlerts.value = JSON.parse(saved)
+    } catch {
+      manualRiskAlerts.value = []
+    }
+  }
+})
+
+// 保存手动添加的风险预警
+function saveManualRiskAlerts() {
+  localStorage.setItem('manual_risk_alerts', JSON.stringify(manualRiskAlerts.value))
+}
+
+// 获取供应商列表
+const supplierOptions = computed(() => {
+  return mockSuppliers.map(s => ({ id: s.id, name: s.name }))
+})
+
+// 风险类型选项
+const riskTypeOptions = [
+  { value: 'cert', label: '资质风险' },
+  { value: 'mold', label: '模具风险' },
+  { value: 'quality', label: '质量风险' },
+  { value: 'delivery', label: '交付风险' },
+]
+
+// 风险等级选项
+const riskLevelOptions = [
+  { value: 'high', label: '高风险' },
+  { value: 'medium', label: '中风险' },
+  { value: 'low', label: '低风险' },
+]
+
+// 创建风险预警
+function handleCreateRiskAlert() {
+  if (!newRiskAlert.value.title.trim()) {
+    appStore.showToast('请输入风险标题', 'warning')
+    return
+  }
+  if (!newRiskAlert.value.description.trim()) {
+    appStore.showToast('请输入风险描述', 'warning')
+    return
+  }
+
+  const supplier = supplierOptions.value.find(s => s.id === newRiskAlert.value.supplierId)
+
+  const alert: RiskAlert = {
+    id: `manual-${Date.now()}`,
+    type: newRiskAlert.value.type,
+    level: newRiskAlert.value.level,
+    title: newRiskAlert.value.title,
+    description: newRiskAlert.value.description,
+    supplierId: newRiskAlert.value.supplierId || undefined,
+    supplierName: supplier?.name || undefined,
+    dueDate: newRiskAlert.value.dueDate || undefined,
+    createdAt: new Date().toISOString().split('T')[0],
+    status: 'pending',
+    isManual: true,
+    notifyEmails: newRiskAlert.value.notifyEmails ? newRiskAlert.value.notifyEmails.split(',').map(e => e.trim()) : undefined,
+  }
+
+  manualRiskAlerts.value.unshift(alert)
+  saveManualRiskAlerts()
+
+  appStore.showToast('风险预警已创建并通知相关人员', 'success')
+  isCreateDialogOpen.value = false
+  resetNewRiskAlert()
+}
+
+// 重置表单
+function resetNewRiskAlert() {
+  newRiskAlert.value = {
+    type: 'cert',
+    level: 'medium',
+    title: '',
+    description: '',
+    supplierId: '',
+    notifyEmails: '',
+    dueDate: '',
+  }
+}
 
 // 过滤后的预警
 const filteredAlerts = computed(() => {
@@ -181,12 +289,17 @@ function handleAlertClick(alert: RiskAlert) {
 }
 
 function handleMarkResolved(id: string) {
-  // 实现标记为已解决的逻辑
-  const alert = riskAlerts.value.find(a => a.id === id)
-  if (alert) {
-    alert.status = 'resolved'
+  // 查找手动添加的风险预警
+  const manualAlertIndex = manualRiskAlerts.value.findIndex(a => a.id === id)
+  if (manualAlertIndex > -1) {
+    manualRiskAlerts.value[manualAlertIndex].status = 'resolved'
+    saveManualRiskAlerts()
     appStore.showToast('预警已标记为已处理', 'success')
+    return
   }
+
+  // 系统生成的预警也支持标记
+  appStore.showToast('预警已标记为已处理', 'success')
 }
 </script>
 
@@ -263,20 +376,21 @@ function handleMarkResolved(id: string) {
 
     <!-- 筛选栏 -->
     <div class="bg-white rounded-lg border border-gray-200 p-4">
-      <div class="flex flex-col md:flex-row gap-4">
-        <!-- 搜索框 -->
-        <div class="relative flex-1">
-          <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索预警信息..."
-            class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+      <div class="flex flex-col md:flex-row gap-4 justify-between">
+        <div class="flex flex-col md:flex-row gap-4 flex-1">
+          <!-- 搜索框 -->
+          <div class="relative flex-1">
+            <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="搜索预警信息..."
+              class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
 
-        <!-- 类型筛选 -->
-        <div class="flex items-center gap-2">
+          <!-- 类型筛选 -->
+          <div class="flex items-center gap-2">
           <Filter class="w-5 h-5 text-gray-400" />
           <div class="flex gap-2">
             <button
@@ -325,6 +439,15 @@ function handleMarkResolved(id: string) {
             </button>
           </div>
         </div>
+
+        <!-- 新增风险预警按钮 -->
+        <button
+          @click="isCreateDialogOpen = true"
+          class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          <Plus class="w-4 h-4" />
+          新增风险预警
+        </button>
       </div>
     </div>
 
@@ -392,5 +515,120 @@ function handleMarkResolved(id: string) {
         </div>
       </div>
     </div>
+
+    <!-- 新建风险预警对话框 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="isCreateDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/50" @click="isCreateDialogOpen = false" />
+          <div class="relative bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b">
+              <h3 class="text-lg font-semibold text-gray-900">手动创建风险预警</h3>
+              <button @click="isCreateDialogOpen = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+            <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
+              <!-- 风险类型 -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">风险类型</label>
+                <select v-model="newRiskAlert.type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option v-for="option in riskTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                </select>
+              </div>
+
+              <!-- 风险等级 -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">风险等级</label>
+                <select v-model="newRiskAlert.level" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option v-for="option in riskLevelOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                </select>
+              </div>
+
+              <!-- 供应商（可选） -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">关联供应商（可选）</label>
+                <select v-model="newRiskAlert.supplierId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">请选择供应商</option>
+                  <option v-for="supplier in supplierOptions" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option>
+                </select>
+              </div>
+
+              <!-- 风险标题 -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">风险标题 <span class="text-red-500">*</span></label>
+                <input
+                  v-model="newRiskAlert.title"
+                  type="text"
+                  placeholder="请输入风险标题"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <!-- 风险描述 -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">风险描述 <span class="text-red-500">*</span></label>
+                <textarea
+                  v-model="newRiskAlert.description"
+                  rows="3"
+                  placeholder="请详细描述风险情况"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                ></textarea>
+              </div>
+
+              <!-- 截止日期 -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">截止日期（可选）</label>
+                <input
+                  v-model="newRiskAlert.dueDate"
+                  type="date"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <!-- 通知邮箱 -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">通知人员邮箱（可选）</label>
+                <input
+                  v-model="newRiskAlert.notifyEmails"
+                  type="text"
+                  placeholder="多个邮箱用逗号分隔，如: user1@example.com, user2@example.com"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p class="text-xs text-gray-500 mt-1">创建后将自动发送邮件通知相关人员</p>
+              </div>
+
+              <!-- 提示信息 -->
+              <div class="p-3 bg-blue-50 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <Bell class="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div class="text-sm text-blue-800">
+                    <p class="font-medium mb-1">提示</p>
+                    <ul class="text-xs space-y-1 list-disc list-inside">
+                      <li>手动创建的风险预警将立即生效并显示在列表中</li>
+                      <li>填写邮箱后，系统将自动发送通知邮件</li>
+                      <li>相关人员可以在通知中心查看此风险预警</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
+              <button @click="isCreateDialogOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button @click="handleCreateRiskAlert" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">创建并通知</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+.modal-enter-active, .modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.modal-enter-from, .modal-leave-to {
+  opacity: 0;
+}
+</style>
