@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RouterView, RouterLink, useRoute } from 'vue-router'
+import { RouterView, RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/useAppStore'
 import NotificationCenter from '@/components/NotificationCenter.vue'
 import {
@@ -22,6 +22,7 @@ import {
 } from 'lucide-vue-next'
 
 const route = useRoute()
+const router = useRouter()
 const appStore = useAppStore()
 
 const supplierNavigation = [
@@ -42,7 +43,7 @@ function isActive(href: string): boolean {
 
 function handleLogout() {
   appStore.logout()
-  window.location.href = '/login'
+  router.push('/login')
 }
 </script>
 
