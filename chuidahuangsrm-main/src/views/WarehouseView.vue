@@ -56,6 +56,26 @@ interface ReconciliationStatement {
 const isReconciliationDialogOpen = ref(false)
 const selectedWarehouseForRecon = ref<any>(null)
 
+// 新增虚拟库存对话框状态
+const isCreateInventoryOpen = ref(false)
+const newInventory = ref({
+  supplierId: '',
+  materialCode: '',
+  materialName: '',
+  theoreticalQty: 0,
+  actualQty: 0,
+  unit: '个',
+  location: '',
+  notes: '',
+})
+
+// 供应商列表
+const suppliers = [
+  { id: 'S001', name: '深圳市精诚模具制造有限公司' },
+  { id: 'S002', name: '东莞市华泰五金制品厂' },
+  { id: 'S003', name: '佛山市永盛铝制品有限公司' },
+]
+
 // 获取库存调整历史
 function getInventoryAdjustHistory(warehouseId: string): InventoryAdjustment[] {
   const saved = localStorage.getItem('inventory_adjustments')
@@ -232,6 +252,110 @@ function handleSaveInventoryAdjust() {
   appStore.showToast('库存调整成功', 'success')
   isInventoryAdjustDialogOpen.value = false
 }
+
+// 打开新增库存对话框
+function openCreateInventoryDialog() {
+  newInventory.value = {
+    supplierId: '',
+    materialCode: '',
+    materialName: '',
+    theoreticalQty: 0,
+    actualQty: 0,
+    unit: '个',
+    location: '',
+    notes: '',
+  }
+  isCreateInventoryOpen.value = true
+}
+
+// 保存新增库存
+function handleSaveInventory() {
+  if (!newInventory.value.supplierId) {
+    appStore.showToast('请选择供应商', 'warning')
+    return
+  }
+  if (!newInventory.value.materialCode.trim()) {
+    appStore.showToast('请输入物料编码', 'warning')
+    return
+  }
+  if (!newInventory.value.materialName.trim()) {
+    appStore.showToast('请输入物料名称', 'warning')
+    return
+  }
+  if (newInventory.value.theoreticalQty <= 0) {
+    appStore.showToast('请输入有效的理论数量', 'warning')
+    return
+  }
+
+  const supplier = suppliers.find(s => s.id === newInventory.value.supplierId)
+  const variance = newInventory.value.theoreticalQty - newInventory.value.actualQty
+  const varianceRate = parseFloat(((variance / newInventory.value.theoreticalQty) * 100).toFixed(2))
+
+  // 创建新的虚拟仓库记录
+  const warehouse = {
+    id: `VW${Date.now()}`,
+    supplierId: newInventory.value.supplierId,
+    supplierName: supplier?.name || '',
+    materialCode: newInventory.value.materialCode,
+    materialName: newInventory.value.materialName,
+    theoreticalQty: newInventory.value.theoreticalQty,
+    actualQty: newInventory.value.actualQty,
+    variance,
+    varianceRate,
+    unit: newInventory.value.unit,
+    location: newInventory.value.location,
+    lastUpdateDate: new Date().toISOString().split('T')[0],
+    status: 'normal',
+  }
+
+  // 保存到 localStorage
+  const saved = localStorage.getItem('virtual_warehouses')
+  let allWarehouses = saved ? JSON.parse(saved) : []
+  allWarehouses.push(warehouse)
+  localStorage.setItem('virtual_warehouses', JSON.stringify(allWarehouses))
+
+  // 更新 mockVirtualWarehouses
+  mockVirtualWarehouses.push(warehouse)
+
+  appStore.showToast('虚拟库存创建成功', 'success')
+  isCreateInventoryOpen.value = false
+}
+
+// 确认供应商上传的库存
+function handleConfirmSupplierInventory(inventoryId: string) {
+  const saved = localStorage.getItem('supplier_inventories')
+  if (saved) {
+    let allInventories = JSON.parse(saved)
+    const idx = allInventories.findIndex((i: any) => i.id === inventoryId)
+    if (idx > -1) {
+      allInventories[idx].status = '已确认'
+      localStorage.setItem('supplier_inventories', JSON.stringify(allInventories))
+
+      // 创建对应的虚拟仓库记录
+      const inventory = allInventories[idx]
+      const supplier = suppliers.find(s => s.id === inventory.supplierId)
+      const warehouse = {
+        id: `VW${Date.now()}`,
+        supplierId: inventory.supplierId,
+        supplierName: supplier?.name || inventory.supplierName,
+        materialCode: inventory.materialCode,
+        materialName: inventory.materialName,
+        theoreticalQty: inventory.quantity,
+        actualQty: inventory.quantity,
+        variance: 0,
+        varianceRate: 0,
+        unit: inventory.unit,
+        location: '',
+        lastUpdateDate: inventory.uploadDate,
+        status: 'normal',
+      }
+
+      mockVirtualWarehouses.push(warehouse)
+      localStorage.setItem('virtual_warehouses', JSON.stringify([...mockVirtualWarehouses]))
+    }
+  }
+  appStore.showToast('库存已确认并同步到虚拟仓库', 'success')
+}
 </script>
 
 <template>
@@ -270,6 +394,16 @@ function handleSaveInventoryAdjust() {
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-semibold text-gray-900">虚拟仓库库存</h3>
             <div class="flex items-center gap-3">
+              <button @click="openCreateInventoryDialog" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                <Plus class="w-4 h-4" />新增库存
+              </button>
+              <select v-model="supplierFilter" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
+                <option value="all">{{ appStore.t('warehouse.allSupplier') }}</option>
+                <option value="S001">深圳市精诚模具制造有限公司</option>
+                <option value="S002">东莞市华泰五金制品厂</option>
+                <option value="S003">佛山市永盛铝制品有限公司</option>
+              </select>
+              <div class="flex items-center border border-gray-300 rounded-lg p-1">
               <select v-model="supplierFilter" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
                 <option value="all">{{ appStore.t('warehouse.allSupplier') }}</option>
                 <option value="S001">深圳市精诚模具制造有限公司</option>
@@ -810,6 +944,74 @@ function handleSaveInventoryAdjust() {
             <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
               <button @click="isReconciliationDialogOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
               <button @click="handleGenerateReconciliationStatement" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">生成核销单</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 新增库存对话框 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="isCreateInventoryOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/50" @click="isCreateInventoryOpen = false" />
+          <div class="relative bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div class="flex items-center justify-between p-4 border-b">
+              <h3 class="text-lg font-semibold text-gray-900">新增虚拟库存</h3>
+              <button @click="isCreateInventoryOpen = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+            <div class="p-6 space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">供应商 <span class="text-red-500">*</span></label>
+                <select v-model="newInventory.supplierId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">请选择供应商</option>
+                  <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">物料编码 <span class="text-red-500">*</span></label>
+                <input v-model="newInventory.materialCode" type="text" placeholder="请输入物料编码" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">物料名称 <span class="text-red-500">*</span></label>
+                <input v-model="newInventory.materialName" type="text" placeholder="请输入物料名称" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">理论数量 <span class="text-red-500">*</span></label>
+                  <input v-model.number="newInventory.theoreticalQty" type="number" min="0" placeholder="理论数量" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">实际数量</label>
+                  <input v-model.number="newInventory.actualQty" type="number" min="0" placeholder="实际数量" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">单位</label>
+                  <select v-model="newInventory.unit" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="个">个</option>
+                    <option value="套">套</option>
+                    <option value="件">件</option>
+                    <option value="KG">KG</option>
+                    <option value="米">米</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">存放位置</label>
+                  <input v-model="newInventory.location" type="text" placeholder="请输入存放位置" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <textarea v-model="newInventory.notes" rows="2" placeholder="请输入备注信息（可选）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
+              <button @click="isCreateInventoryOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button @click="handleSaveInventory" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">保存</button>
             </div>
           </div>
         </div>
