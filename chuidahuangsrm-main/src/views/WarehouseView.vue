@@ -404,13 +404,6 @@ function handleConfirmSupplierInventory(inventoryId: string) {
                 <option value="S003">佛山市永盛铝制品有限公司</option>
               </select>
               <div class="flex items-center border border-gray-300 rounded-lg p-1">
-              <select v-model="supplierFilter" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
-                <option value="all">{{ appStore.t('warehouse.allSupplier') }}</option>
-                <option value="S001">深圳市精诚模具制造有限公司</option>
-                <option value="S002">东莞市华泰五金制品厂</option>
-                <option value="S003">佛山市永盛铝制品有限公司</option>
-              </select>
-              <div class="flex items-center border border-gray-300 rounded-lg p-1">
                 <button
                   class="px-3 py-1.5 rounded-md text-sm flex items-center gap-1"
                   :class="viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'"
