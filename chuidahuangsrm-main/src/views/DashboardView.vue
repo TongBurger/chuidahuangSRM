@@ -37,7 +37,11 @@
     try {
       const saved = localStorage.getItem('dashboard-layout')
       if (saved) {
-        return JSON.parse(saved)
+        const parsed = JSON.parse(saved)
+        // 验证返回的是数组
+        if (Array.isArray(parsed)) {
+          return parsed
+        }
       }
     } catch (e) {
       console.error('Failed to load layout:', e)
@@ -72,7 +76,13 @@
   onMounted(() => {
     const savedLayout = getSavedLayout()
     if (savedLayout) {
-      widgets.value = savedLayout
+      // 再次验证确保是有效数组
+      if (Array.isArray(savedLayout) && savedLayout.length > 0) {
+        widgets.value = savedLayout
+      } else {
+        // 数据无效，清除 localStorage
+        localStorage.removeItem('dashboard-layout')
+      }
     }
   })
 

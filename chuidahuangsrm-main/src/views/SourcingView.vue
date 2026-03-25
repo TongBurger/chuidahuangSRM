@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { TrendingUp, DollarSign, FileText, Target, LayoutGrid, List, Plus, XCircle, Check, CheckCircle, Eye, Award, Edit, Trash2, AlertCircle, Send, Clock, Users, Package } from 'lucide-vue-next'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { TrendingUp, DollarSign, FileText, Target, LayoutGrid, List, Plus, XCircle, Check, CheckCircle, Eye, Award, Edit, Trash2, AlertCircle, Send, Clock, Users, Package, X } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/useAppStore'
+import { mockSuppliers } from '@/data/mockData'
 
 const appStore = useAppStore()
 const activeTab = ref('projects')
@@ -168,6 +169,98 @@ function toggleSupplier(supplierId: string) {
     newProject.value.invitedSuppliers.splice(index, 1)
   } else {
     newProject.value.invitedSuppliers.push(supplierId)
+  }
+}
+
+// 供应商搜索下拉框状态
+const supplierSearchQuery = ref('')
+const isSupplierDropdownOpen = ref(false)
+const supplierSearchInputRef = ref<HTMLElement | null>(null)
+const supplierDropdownRef = ref<HTMLElement | null>(null)
+const dropdownStyle = ref({ top: '0px', left: '0px', width: '0px' })
+
+// 计算下拉框位置（只在需要时调用）
+function updateDropdownPosition() {
+  if (supplierSearchInputRef.value) {
+    const rect = supplierSearchInputRef.value.getBoundingClientRect()
+    dropdownStyle.value = {
+      top: `${rect.bottom + window.scrollY + 4}px`,
+      left: `${rect.left + window.scrollX}px`,
+      width: `${rect.width}px`
+    }
+  }
+}
+
+// 打开下拉框并更新位置
+function openDropdown() {
+  isSupplierDropdownOpen.value = true
+  nextTick(() => {
+    updateDropdownPosition()
+  })
+}
+
+// 点击外部关闭下拉框
+function handleClickOutside(event: MouseEvent) {
+  // 如果下拉框未打开，不处理
+  if (!isSupplierDropdownOpen.value) return
+
+  const target = event.target as Node
+
+  // 检查是否点击了输入框或下拉框
+  const clickedInput = supplierSearchInputRef.value && supplierSearchInputRef.value.contains(target)
+  const clickedDropdown = supplierDropdownRef.value && supplierDropdownRef.value.contains(target)
+
+  // 如果既没点击输入框，也没点击下拉框，则关闭下拉框
+  if (!clickedInput && !clickedDropdown) {
+    isSupplierDropdownOpen.value = false
+  }
+}
+
+// 过滤后的供应商列表（排除已选）
+const filteredSuppliers = computed(() => {
+  const query = supplierSearchQuery.value.toLowerCase().trim()
+  return suppliers.value.filter(s => {
+    const isSelected = newProject.value.invitedSuppliers.includes(s.id)
+    const matchesSearch = !query ||
+      s.name.toLowerCase().includes(query) ||
+      s.code.toLowerCase().includes(query) ||
+      s.category.toLowerCase().includes(query)
+    return !isSelected && matchesSearch
+  })
+})
+
+// 已选供应商对象列表
+const selectedSupplierObjects = computed(() => {
+  return suppliers.value.filter(s => newProject.value.invitedSuppliers.includes(s.id))
+})
+
+// 添加供应商
+function addSupplier(supplierId: string, event?: MouseEvent) {
+  // 阻止事件冒泡，防止触发外部点击
+  if (event) {
+    event.stopPropagation()
+  }
+  if (!newProject.value.invitedSuppliers.includes(supplierId)) {
+    newProject.value.invitedSuppliers.push(supplierId)
+  }
+  supplierSearchQuery.value = ''
+  // 等待 DOM 更新后重新计算位置
+  nextTick(() => {
+    updateDropdownPosition()
+  })
+}
+
+// 移除供应商
+function removeSupplier(supplierId: string) {
+  const index = newProject.value.invitedSuppliers.indexOf(supplierId)
+  if (index > -1) {
+    newProject.value.invitedSuppliers.splice(index, 1)
+  }
+  // 如果下拉框打开，更新位置
+  if (isSupplierDropdownOpen.value) {
+    nextTick(() => {
+      updateDropdownPosition()
+    })
   }
 }
 
@@ -608,27 +701,8 @@ function getStatusClass(status: string) {
 
 // 初始化数据
 onMounted(() => {
-  // 获取供应商列表
-  const savedSuppliers = localStorage.getItem('suppliers')
-  if (savedSuppliers) {
-    try {
-      suppliers.value = JSON.parse(savedSuppliers)
-    } catch {
-      suppliers.value = [
-        { id: 'S001', name: '深圳市精诚模具制造有限公司', category: '模具' },
-        { id: 'S002', name: '东莞市华泰五金制品厂', category: '五金' },
-        { id: 'S003', name: '佛山市永盛铝制品有限公司', category: '铝材' },
-        { id: 'S004', name: '广州市宏达涂层科技有限公司', category: '涂层' },
-      ]
-    }
-  } else {
-    suppliers.value = [
-      { id: 'S001', name: '深圳市精诚模具制造有限公司', category: '模具' },
-      { id: 'S002', name: '东莞市华泰五金制品厂', category: '五金' },
-      { id: 'S003', name: '佛山市永盛铝制品有限公司', category: '铝材' },
-      { id: 'S004', name: '广州市宏达涂层科技有限公司', category: '涂层' },
-    ]
-  }
+  // 获取供应商列表 - 从 mockData 加载
+  suppliers.value = mockSuppliers
 
   // 获取寻源项目列表
   const savedProjects = localStorage.getItem('sourcingProjects')
@@ -700,6 +774,14 @@ onMounted(() => {
 
   // 检查报价有效期
   checkExpiringQuotations()
+
+  // 添加点击外部关闭下拉框的事件监听
+  document.addEventListener('click', handleClickOutside)
+})
+
+// 组件卸载时移除事件监听
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 
 // 计算属性
@@ -1136,18 +1218,74 @@ const pendingApprovals = computed(() => approvals.value.filter(a => a.status ===
                 </div>
               </div>
 
-              <!-- 邀请供应商 -->
+              <!-- 邀请供应商 - 方案B: 搜索下拉 + 标签 -->
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">邀请供应商 <span class="text-red-500">*</span></label>
-                <div class="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto">
-                  <div v-if="suppliers.length === 0" class="text-sm text-gray-500 text-center py-2">暂无供应商，请先在供应商管理中添加</div>
-                  <div v-else class="grid grid-cols-2 gap-2">
-                    <label v-for="supplier in suppliers" :key="supplier.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                      <input type="checkbox" :value="supplier.id" :checked="newProject.invitedSuppliers.includes(supplier.id)" @change="toggleSupplier(supplier.id)" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                      <span class="text-sm text-gray-700">{{ supplier.name }}</span>
-                    </label>
-                  </div>
+
+                <!-- 已选供应商标签 -->
+                <div v-if="selectedSupplierObjects.length > 0" class="flex flex-wrap gap-2 mb-2">
+                  <span v-for="supplier in selectedSupplierObjects" :key="supplier.id" class="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                    {{ supplier.name }}
+                    <button @click="removeSupplier(supplier.id)" class="hover:text-blue-900">
+                      <X class="w-3 h-3" />
+                    </button>
+                  </span>
                 </div>
+
+                <!-- 搜索下拉框 -->
+                <div class="relative">
+                  <div class="relative" ref="supplierSearchInputRef">
+                    <input
+                      v-model="supplierSearchQuery"
+                      @focus="openDropdown"
+                      type="text"
+                      placeholder="搜索供应商名称/编码/分类..."
+                      class="w-full px-3 py-2 pl-9 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+
+                  <!-- 下拉列表 - Teleport 到 body -->
+                  <Teleport to="body">
+                    <div
+                      ref="supplierDropdownRef"
+                      v-if="isSupplierDropdownOpen && filteredSuppliers.length > 0"
+                      class="fixed bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-[100]"
+                      :style="dropdownStyle"
+                    >
+                      <div
+                        v-for="supplier in filteredSuppliers"
+                        :key="supplier.id"
+                        @click="addSupplier(supplier.id, $event)"
+                        class="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                      >
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <p class="text-sm font-medium text-gray-900">{{ supplier.name }}</p>
+                            <p class="text-xs text-gray-500">{{ supplier.code }} · {{ supplier.category }}</p>
+                          </div>
+                          <span class="text-xs px-2 py-0.5 rounded-full" :class="{
+                            'bg-blue-100 text-blue-800': supplier.category === '战略',
+                            'bg-green-100 text-green-800': supplier.category === '关键',
+                            'bg-gray-100 text-gray-800': supplier.category === '杠杆'
+                          }">{{ supplier.overallScore }}分</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 无结果提示 -->
+                    <div
+                      v-if="isSupplierDropdownOpen && filteredSuppliers.length === 0 && supplierSearchQuery"
+                      class="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500 z-[100]"
+                      :style="dropdownStyle"
+                    >
+                      未找到匹配的供应商
+                    </div>
+                  </Teleport>
+                </div>
+
                 <p class="text-xs text-gray-500 mt-1">已选择 {{ newProject.invitedSuppliers.length }} 家供应商</p>
               </div>
             </div>
