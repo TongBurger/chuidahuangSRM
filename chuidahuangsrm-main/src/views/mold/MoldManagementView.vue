@@ -538,7 +538,7 @@
               <button @click="openMaintenanceDialog(mold)" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-2">
                 <Plus class="w-4 h-4" />记录维保
               </button>
-              <button v-if="mold.status === '在用' && mold.remainingLife < 90" class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+              <button v-if="mold.status === '在用' && mold.remainingLife < 90" @click="openMaintenanceDialog(mold)" class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
                 <Wrench class="w-4 h-4" />{{ appStore.t('btn.scheduleMaintenance') }}
               </button>
             </div>

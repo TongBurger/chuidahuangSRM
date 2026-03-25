@@ -89,6 +89,21 @@
       phone: '',
       email: '',
     }
+    selectedUser.value = null
+    isAddDialogOpen.value = true
+  }
+
+  function openEditDialog(user: User) {
+    formErrors.value = {}
+    selectedUser.value = user
+    newUser.value = {
+      name: user.name,
+      username: user.username,
+      role: user.role,
+      department: user.department,
+      phone: user.phone,
+      email: user.email,
+    }
     isAddDialogOpen.value = true
   }
 
@@ -114,33 +129,50 @@
       return
     }
 
-    // 创建新用户对象
-    const user: User = {
-      id: `U${String(users.value.length + 1).padStart(3, '0')}`,
-      name: newUser.value.name.trim(),
-      username: newUser.value.username.trim(),
-      role: newUser.value.role,
-      department: newUser.value.department,
-      status: '在职',
-      phone: newUser.value.phone.trim(),
-      email: newUser.value.email.trim(),
+    if (selectedUser.value) {
+      // 编辑现有用户
+      const userIndex = users.value.findIndex(u => u.id === selectedUser.value!.id)
+      if (userIndex > -1) {
+        users.value[userIndex] = {
+          ...users.value[userIndex],
+          name: newUser.value.name.trim(),
+          username: newUser.value.username.trim(),
+          role: newUser.value.role,
+          department: newUser.value.department,
+          phone: newUser.value.phone.trim(),
+          email: newUser.value.email.trim(),
+        }
+      }
+      appStore.showToast('用户更新成功', 'success')
+    } else {
+      // 创建新用户对象
+      const user: User = {
+        id: `U${String(users.value.length + 1).padStart(3, '0')}`,
+        name: newUser.value.name.trim(),
+        username: newUser.value.username.trim(),
+        role: newUser.value.role,
+        department: newUser.value.department,
+        status: '在职',
+        phone: newUser.value.phone.trim(),
+        email: newUser.value.email.trim(),
+      }
+
+      // 添加到列表
+      users.value.push(user)
+
+      // 自动分配对应角色
+      const roleId = permissionsStore.getRoleIdByRoleName(newUser.value.role)
+      permissionsStore.assignRole(user.id, roleId, appStore.currentUser.name)
+
+      appStore.showToast('用户添加成功', 'success')
     }
-
-    // 添加到列表
-    users.value.push(user)
-
-    // 自动分配对应角色
-    const roleId = permissionsStore.getRoleIdByRoleName(newUser.value.role)
-    permissionsStore.assignRole(user.id, roleId, appStore.currentUser.name)
 
     // 保存到 localStorage
     localStorage.setItem('users', JSON.stringify(users.value))
 
-    // 显示成功提示
-    appStore.showToast('用户添加成功', 'success')
-
     // 关闭对话框
     isAddDialogOpen.value = false
+    selectedUser.value = null
   }
 
   // 打开角色管理对话框
@@ -246,7 +278,7 @@
                 </td>
                 <td class="px-4 py-3 text-sm">
                   <div class="flex gap-2">
-                    <button class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">编辑</button>
+                    <button @click="openEditDialog(user)" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">编辑</button>
                     <button @click="openRoleDialog(user)" class="px-3 py-1.5 border border-blue-300 rounded-lg text-sm text-blue-700 hover:bg-blue-50 flex items-center gap-1">
                       <Key class="w-3 h-3" />权限
                     </button>
@@ -301,7 +333,7 @@
           <div v-if="isAddDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/50" @click="isAddDialogOpen = false" />
             <div class="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">添加用户</h3>
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">{{ selectedUser ? '编辑用户' : '添加用户' }}</h3>
 
               <div class="space-y-4">
                 <div>
@@ -367,7 +399,7 @@
 
               <div class="flex justify-end gap-3 mt-6">
                 <button type="button" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50" @click="isAddDialogOpen = false">取消</button>
-                <button type="button" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" @click="handleAddUser">添加</button>
+                <button type="button" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" @click="handleAddUser">{{ selectedUser ? '保存' : '添加' }}</button>
               </div>
             </div>
           </div>
