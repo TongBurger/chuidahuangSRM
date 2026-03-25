@@ -114,6 +114,12 @@ function loadDefaultInvoices() {
     { id: 'INV002', invoiceNo: '44030002', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', amount: 156000, taxAmount: 19890, totalAmount: 175890, invoiceDate: '2026-03-16', status: '已上传' },
     { id: 'INV003', invoiceNo: '44030003', supplier: '佛山市永盛铝制品有限公司', supplierId: 'S003', amount: 428000, taxAmount: 54540, totalAmount: 482540, invoiceDate: '2026-03-18', status: '已上传' },
     { id: 'INV004', invoiceNo: '44020001', supplier: '深圳市精诚模具制造有限公司', supplierId: 'S001', amount: 356000, taxAmount: 45260, totalAmount: 401260, invoiceDate: '2026-02-20', status: '已上传' },
+    { id: 'INV005', invoiceNo: '44030004', supplier: '中山市小榄镇压铸厂', supplierId: 'S004', amount: 198000, taxAmount: 25170, totalAmount: 223170, invoiceDate: '2026-03-17', status: '已上传' },
+    { id: 'INV006', invoiceNo: '44030005', supplier: '惠州市五金制品有限公司', supplierId: 'S005', amount: 245000, taxAmount: 31155, totalAmount: 276155, invoiceDate: '2026-03-19', status: '已上传' },
+    { id: 'INV007', invoiceNo: '44020002', supplier: '东莞市华泰五金制品厂', supplierId: 'S002', amount: 312000, taxAmount: 39660, totalAmount: 351660, invoiceDate: '2026-02-25', status: '已上传' },
+    { id: 'INV008', invoiceNo: '44030006', supplier: '广州市番禺区塑料制品厂', supplierId: 'S006', amount: 168000, taxAmount: 21360, totalAmount: 189360, invoiceDate: '2026-03-14', status: '已上传' },
+    { id: 'INV009', invoiceNo: '44030007', supplier: '江门市新会区不锈钢制品厂', supplierId: 'S007', amount: 225000, taxAmount: 28620, totalAmount: 253620, invoiceDate: '2026-03-20', status: '已上传' },
+    { id: 'INV010', invoiceNo: '44020003', supplier: '佛山市永盛铝制品有限公司', supplierId: 'S003', amount: 385000, taxAmount: 48935, totalAmount: 433935, invoiceDate: '2026-02-28', status: '已上传' },
   ]
   saveInvoices()
 }

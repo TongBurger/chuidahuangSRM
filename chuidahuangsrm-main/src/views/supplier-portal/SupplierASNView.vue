@@ -206,6 +206,11 @@ onMounted(() => {
   availableOrders.value = [
     { id: 'PO002', orderNo: 'PO2026031801' },
     { id: 'PO003', orderNo: 'PO2026031501' },
+    { id: 'PO004', orderNo: 'PO2026032001' },
+    { id: 'PO005', orderNo: 'PO2026031902' },
+    { id: 'PO006', orderNo: 'PO2026031701' },
+    { id: 'PO007', orderNo: 'PO2026032002' },
+    { id: 'PO008', orderNo: 'PO2026031601' },
   ]
 
   // 加载订单数据
