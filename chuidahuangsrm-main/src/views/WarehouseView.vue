@@ -11,6 +11,11 @@ const viewMode = ref<'grid' | 'list'>('list')
 const asnViewMode = ref<'grid' | 'list'>('list')
 const reconciliationViewMode = ref<'grid' | 'list'>('list')
 
+// 查询框状态
+const warehouseSearchQuery = ref('')
+const asnSearchQuery = ref('')
+const reconciliationSearchQuery = ref('')
+
 // 详情对话框
 const selectedWarehouse = ref<any>(null)
 const selectedASN = ref<any>(null)
@@ -74,6 +79,19 @@ const isUploadInventoryOpen = ref(false)
 const uploadedFile = ref<File | null>(null)
 const uploadPreview = ref<any[]>([])
 const isProcessingUpload = ref(false)
+
+// 新增核销对话框状态
+const isCreateReconciliationOpen = ref(false)
+const newReconciliation = ref({
+  supplierId: '',
+  materialCode: '',
+  materialName: '',
+  theoreticalQty: 0,
+  actualQty: 0,
+  unit: '个',
+  reconciliationDate: new Date().toISOString().split('T')[0],
+  notes: '',
+})
 
 // 供应商列表
 const suppliers = [
@@ -139,11 +157,51 @@ const newASN = ref({
   items: [{ materialCode: '', materialName: '', quantity: 1, unit: '个' }],
 })
 
-const filteredWarehouses = computed(() =>
-  supplierFilter.value === 'all'
+const filteredWarehouses = computed(() => {
+  let result = supplierFilter.value === 'all'
     ? mockVirtualWarehouses
     : mockVirtualWarehouses.filter((w) => w.supplierId === supplierFilter.value)
-)
+
+  if (warehouseSearchQuery.value.trim()) {
+    const query = warehouseSearchQuery.value.toLowerCase().trim()
+    result = result.filter((w) =>
+      w.materialName.toLowerCase().includes(query) ||
+      w.materialCode.toLowerCase().includes(query) ||
+      w.supplierName.toLowerCase().includes(query)
+    )
+  }
+  return result
+})
+
+// 过滤后的ASN列表
+const filteredASNs = computed(() => {
+  let result = mockASNs
+
+  if (asnSearchQuery.value.trim()) {
+    const query = asnSearchQuery.value.toLowerCase().trim()
+    result = result.filter((a) =>
+      a.asnNo.toLowerCase().includes(query) ||
+      a.supplierName.toLowerCase().includes(query) ||
+      a.orderNo.toLowerCase().includes(query)
+    )
+  }
+  return result
+})
+
+// 过滤后的核销列表
+const filteredReconciliations = computed(() => {
+  let result = mockVirtualWarehouses
+
+  if (reconciliationSearchQuery.value.trim()) {
+    const query = reconciliationSearchQuery.value.toLowerCase().trim()
+    result = result.filter((w) =>
+      w.materialName.toLowerCase().includes(query) ||
+      w.materialCode.toLowerCase().includes(query) ||
+      w.supplierName.toLowerCase().includes(query)
+    )
+  }
+  return result
+})
 
 // 查看库存明细
 function handleViewWarehouseDetail(warehouse: any) {
@@ -527,6 +585,72 @@ function handleConfirmSupplierInventory(inventoryId: string) {
   }
   appStore.showToast('库存已确认并同步到虚拟仓库', 'success')
 }
+
+// 打开新增核销对话框
+function openCreateReconciliationDialog() {
+  newReconciliation.value = {
+    supplierId: '',
+    materialCode: '',
+    materialName: '',
+    theoreticalQty: 0,
+    actualQty: 0,
+    unit: '个',
+    reconciliationDate: new Date().toISOString().split('T')[0],
+    notes: '',
+  }
+  isCreateReconciliationOpen.value = true
+}
+
+// 保存新增核销
+function handleSaveReconciliation() {
+  if (!newReconciliation.value.supplierId) {
+    appStore.showToast('请选择供应商', 'warning')
+    return
+  }
+  if (!newReconciliation.value.materialCode.trim()) {
+    appStore.showToast('请输入物料编码', 'warning')
+    return
+  }
+  if (!newReconciliation.value.materialName.trim()) {
+    appStore.showToast('请输入物料名称', 'warning')
+    return
+  }
+  if (newReconciliation.value.theoreticalQty <= 0) {
+    appStore.showToast('请输入有效的应耗数量', 'warning')
+    return
+  }
+  if (newReconciliation.value.actualQty < 0) {
+    appStore.showToast('请输入有效的实耗数量', 'warning')
+    return
+  }
+
+  const supplier = suppliers.find(s => s.id === newReconciliation.value.supplierId)
+  const variance = newReconciliation.value.theoreticalQty - newReconciliation.value.actualQty
+  const varianceRate = parseFloat(((variance / newReconciliation.value.theoreticalQty) * 100).toFixed(2))
+
+  // 创建核销单记录
+  const statement: ReconciliationStatement = {
+    id: `RS${Date.now()}`,
+    warehouseId: '',
+    materialName: newReconciliation.value.materialName,
+    theoreticalQty: newReconciliation.value.theoreticalQty,
+    actualQty: newReconciliation.value.actualQty,
+    varianceQty: variance,
+    varianceRate: varianceRate,
+    statementDate: newReconciliation.value.reconciliationDate,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  }
+
+  // 保存到 localStorage
+  const saved = localStorage.getItem('reconciliation_statements')
+  let statements = saved ? JSON.parse(saved) : []
+  statements.push(statement)
+  localStorage.setItem('reconciliation_statements', JSON.stringify(statements))
+
+  appStore.showToast('核销单已创建成功', 'success')
+  isCreateReconciliationOpen.value = false
+}
 </script>
 
 <template>
@@ -556,15 +680,27 @@ function handleConfirmSupplierInventory(inventoryId: string) {
     <!-- 选项卡 -->
     <div class="bg-white rounded-lg border border-gray-200">
       <div class="flex border-b border-gray-200">
-        <button v-for="tab in [{ id: 'virtual-warehouse', label: '虚拟仓库' }, { id: 'asn', label: 'ASN管理' }, { id: 'reconciliation', label: '物料核销' }]" :key="tab.id" class="px-6 py-3 text-sm font-medium transition-colors" :class="activeTab === tab.id ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'" @click="activeTab = tab.id">{{ tab.label }}</button>
+        <button v-for="tab in [{ id: 'virtual-warehouse', label: '库存管理' }, { id: 'asn', label: 'ASN管理' }, { id: 'reconciliation', label: '物料核销' }]" :key="tab.id" class="px-6 py-3 text-sm font-medium transition-colors" :class="activeTab === tab.id ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'" @click="activeTab = tab.id">{{ tab.label }}</button>
       </div>
 
       <div class="p-6">
         <!-- 虚拟仓库 -->
         <div v-if="activeTab === 'virtual-warehouse'" class="space-y-4">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-base font-semibold text-gray-900">虚拟仓库库存</h3>
+            <h3 class="text-base font-semibold text-gray-900">库存管理</h3>
             <div class="flex items-center gap-3">
+              <!-- 查询框 -->
+              <div class="relative">
+                <input
+                  v-model="warehouseSearchQuery"
+                  type="text"
+                  placeholder="搜索物料名称/编码/供应商..."
+                  class="w-64 pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
               <button @click="openCreateInventoryDialog" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
                 <Plus class="w-4 h-4" />新增库存
               </button>
@@ -686,6 +822,18 @@ function handleConfirmSupplierInventory(inventoryId: string) {
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-semibold text-gray-900">{{ appStore.t('warehouse.asn.title') }}</h3>
             <div class="flex items-center gap-3">
+              <!-- 查询框 -->
+              <div class="relative">
+                <input
+                  v-model="asnSearchQuery"
+                  type="text"
+                  placeholder="搜索ASN号/供应商/订单号..."
+                  class="w-64 pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
               <div class="flex items-center border border-gray-300 rounded-lg p-1">
                 <button
                   class="px-3 py-1.5 rounded-md text-sm flex items-center gap-1"
@@ -707,7 +855,7 @@ function handleConfirmSupplierInventory(inventoryId: string) {
               </button>
             </div>
           </div>
-          <div v-if="asnViewMode === 'grid'" v-for="asn in mockASNs" :key="asn.id" class="border border-gray-200 rounded-lg p-4">
+          <div v-if="asnViewMode === 'grid'" v-for="asn in filteredASNs" :key="asn.id" class="border border-gray-200 rounded-lg p-4">
             <div class="flex items-start justify-between mb-4">
               <div>
                 <div class="flex items-center gap-2 mb-2">
@@ -770,7 +918,7 @@ function handleConfirmSupplierInventory(inventoryId: string) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="asn in mockASNs" :key="asn.id" class="border-t border-gray-200">
+                <tr v-for="asn in filteredASNs" :key="asn.id" class="border-t border-gray-200">
                   <td class="px-4 py-3 text-gray-900 font-medium">{{ asn.asnNo }}</td>
                   <td class="px-4 py-3 text-gray-900">{{ asn.supplierName }}</td>
                   <td class="px-4 py-3 text-gray-900">{{ asn.orderNo }}</td>
@@ -797,7 +945,22 @@ function handleConfirmSupplierInventory(inventoryId: string) {
         <div v-if="activeTab === 'reconciliation'" class="space-y-4">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-semibold text-gray-900">{{ appStore.t('warehouse.recon.title') }}</h3>
-            <div class="flex items-center border border-gray-300 rounded-lg p-1">
+            <div class="flex items-center gap-3">
+              <!-- 查询框 -->
+              <div class="relative">
+                <input
+                  v-model="reconciliationSearchQuery"
+                  type="text"
+                  placeholder="搜索物料名称/编码/供应商..."
+                  class="w-64 pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <button @click="openCreateReconciliationDialog" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                <Plus class="w-4 h-4" />新增核销
+              </button>
               <button
                 class="px-3 py-1.5 rounded-md text-sm flex items-center gap-1"
                 :class="reconciliationViewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'"
@@ -821,7 +984,7 @@ function handleConfirmSupplierInventory(inventoryId: string) {
             </div>
             <p class="text-sm text-blue-800">系统根据ERP的BOM自动计算理论耗量，定期比对"实耗 vs. 应耗"，自动生成损耗分析报告。</p>
           </div>
-          <div v-if="reconciliationViewMode === 'grid'" v-for="warehouse in mockVirtualWarehouses" :key="warehouse.id" class="border border-gray-200 rounded-lg p-4">
+          <div v-if="reconciliationViewMode === 'grid'" v-for="warehouse in filteredReconciliations" :key="warehouse.id" class="border border-gray-200 rounded-lg p-4">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h4 class="font-semibold text-gray-900">{{ warehouse.materialName }}</h4>
@@ -857,7 +1020,7 @@ function handleConfirmSupplierInventory(inventoryId: string) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="warehouse in mockVirtualWarehouses" :key="warehouse.id" class="border-t border-gray-200">
+                <tr v-for="warehouse in filteredReconciliations" :key="warehouse.id" class="border-t border-gray-200">
                   <td class="px-4 py-3 text-gray-900 font-medium">{{ warehouse.materialName }}</td>
                   <td class="px-4 py-3 text-gray-900">{{ warehouse.supplierName }}</td>
                   <td class="px-4 py-3 text-right text-gray-900">{{ warehouse.theoreticalQty }} {{ warehouse.unit }}</td>
@@ -1301,6 +1464,83 @@ function handleConfirmSupplierInventory(inventoryId: string) {
               >
                 确认导入 ({{ uploadPreview.filter(i => i.valid).length }} 条有效)
               </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 新增核销对话框 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="isCreateReconciliationOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/50" @click="isCreateReconciliationOpen = false" />
+          <div class="relative bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div class="flex items-center justify-between p-4 border-b">
+              <h3 class="text-lg font-semibold text-gray-900">新增核销单</h3>
+              <button @click="isCreateReconciliationOpen = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+            <div class="p-6 space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">供应商 <span class="text-red-500">*</span></label>
+                <select v-model="newReconciliation.supplierId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">请选择供应商</option>
+                  <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">物料编码 <span class="text-red-500">*</span></label>
+                <input v-model="newReconciliation.materialCode" type="text" placeholder="请输入物料编码" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">物料名称 <span class="text-red-500">*</span></label>
+                <input v-model="newReconciliation.materialName" type="text" placeholder="请输入物料名称" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">应耗数量 <span class="text-red-500">*</span></label>
+                  <input v-model.number="newReconciliation.theoreticalQty" type="number" min="0" placeholder="应耗数量" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">实耗数量 <span class="text-red-500">*</span></label>
+                  <input v-model.number="newReconciliation.actualQty" type="number" min="0" placeholder="实耗数量" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">单位</label>
+                  <select v-model="newReconciliation.unit" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="个">个</option>
+                    <option value="套">套</option>
+                    <option value="件">件</option>
+                    <option value="KG">KG</option>
+                    <option value="米">米</option>
+                    <option value="张">张</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">核销日期</label>
+                  <input v-model="newReconciliation.reconciliationDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <textarea v-model="newReconciliation.notes" rows="2" placeholder="请输入备注信息（可选）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+              </div>
+              <!-- 预览损耗信息 -->
+              <div v-if="newReconciliation.theoreticalQty > 0" class="p-3 bg-gray-50 rounded-lg">
+                <p class="text-sm font-medium text-gray-700 mb-2">损耗预览</p>
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                  <div><span class="text-gray-600">差异数量:</span> <span class="font-medium">{{ newReconciliation.theoreticalQty - newReconciliation.actualQty }} {{ newReconciliation.unit }}</span></div>
+                  <div><span class="text-gray-600">损耗率:</span> <span class="font-medium" :class="Math.abs(((newReconciliation.theoreticalQty - newReconciliation.actualQty) / newReconciliation.theoreticalQty) * 100) > 2 ? 'text-red-600' : 'text-green-600'">{{ (((newReconciliation.theoreticalQty - newReconciliation.actualQty) / newReconciliation.theoreticalQty) * 100).toFixed(2) }}%</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
+              <button @click="isCreateReconciliationOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button @click="handleSaveReconciliation" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">保存</button>
             </div>
           </div>
         </div>

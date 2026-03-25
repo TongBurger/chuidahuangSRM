@@ -34,7 +34,7 @@ export const useAppStore = defineStore('app', () => {
       'nav.suppliers': '供应商管理',
       'nav.orders': '订单协同',
       'nav.molds': '模具管理',
-      'nav.warehouse': '代加工仓储',
+      'nav.warehouse': '代加工送货管理',
       'nav.sourcing': '战略寻源',
       'nav.finance': '财务对账',
       'nav.riskAlerts': '风险预警',

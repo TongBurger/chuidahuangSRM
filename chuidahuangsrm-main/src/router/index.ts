@@ -62,7 +62,7 @@ const router = createRouter({
           path: 'warehouse',
           name: 'warehouse',
           component: () => import('@/views/WarehouseView.vue'),
-          meta: { title: '代加工仓储' },
+          meta: { title: '代加工送货管理' },
         },
         {
           path: 'sourcing',
