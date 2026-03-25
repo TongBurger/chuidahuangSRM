@@ -41,13 +41,23 @@ const reviewForm = ref({
 // 初始化注册数据
 onMounted(() => {
   const saved = localStorage.getItem('supplier_registrations')
+  let needInit = false
+
   if (saved) {
     try {
       registrations.value = JSON.parse(saved)
+      // 如果旧数据只有2条，重新初始化
+      if (registrations.value.length < 5) {
+        needInit = true
+      }
     } catch {
-      registrations.value = []
+      needInit = true
     }
   } else {
+    needInit = true
+  }
+
+  if (needInit) {
     // 初始化示例数据
     registrations.value = [
       {
@@ -257,6 +267,11 @@ onMounted(() => {
         submittedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ]
+    // 保存到 localStorage
+    localStorage.setItem('supplier_registrations', JSON.stringify(registrations.value))
+  }
+  // 如果数据不足（<5条），更新 localStorage
+  if (registrations.value.length < 5) {
     localStorage.setItem('supplier_registrations', JSON.stringify(registrations.value))
   }
 })
