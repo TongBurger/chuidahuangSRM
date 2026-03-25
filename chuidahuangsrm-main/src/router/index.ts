@@ -151,6 +151,12 @@ const router = createRouter({
           meta: { title: '绩效报告' },
         },
         {
+          path: 'sourcing',
+          name: 'supplier-portal-sourcing',
+          component: () => import('@/views/supplier-portal/SupplierSourcingView.vue'),
+          meta: { title: '寻源报价' },
+        },
+        {
           path: 'profile',
           name: 'supplier-portal-profile',
           component: () => import('@/views/supplier-portal/SupplierProfileView.vue'),

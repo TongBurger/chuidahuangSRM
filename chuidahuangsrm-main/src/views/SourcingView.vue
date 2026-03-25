@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { TrendingUp, DollarSign, FileText, Target, LayoutGrid, List, Plus, XCircle, Check, Eye, Award, Edit, Trash2, AlertCircle, Send, Clock, Users, Package } from 'lucide-vue-next'
+import { TrendingUp, DollarSign, FileText, Target, LayoutGrid, List, Plus, XCircle, Check, CheckCircle, Eye, Award, Edit, Trash2, AlertCircle, Send, Clock, Users, Package } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/useAppStore'
 
 const appStore = useAppStore()
@@ -470,6 +470,128 @@ function handleSaveProject() {
   selectedProject.value = null
 }
 
+// ==================== 发送询价单功能 ====================
+
+// 询价单发送记录
+interface InquiryInvitation {
+  id: string
+  projectId: string
+  projectName: string
+  supplierIds: string[]
+  sendDate: string
+  status: 'pending' | 'viewed' | 'quoted'
+}
+
+const inquiryInvitations = ref<InquiryInvitation[]>([])
+
+// 加载询价单记录
+function loadInquiryInvitations() {
+  const saved = localStorage.getItem('sourcing_inquiries')
+  if (saved) {
+    try {
+      inquiryInvitations.value = JSON.parse(saved)
+    } catch {
+      inquiryInvitations.value = []
+    }
+  }
+}
+
+// 发送询价单
+function handleSendInquiry(project: any) {
+  // 检查是否有邀请的供应商
+  if (!project.invitedSuppliers || project.invitedSuppliers.length === 0) {
+    appStore.showToast('该项目没有邀请供应商，请先编辑项目添加供应商', 'warning')
+    return
+  }
+
+  // 创建询价单记录
+  const invitation: InquiryInvitation = {
+    id: `INQ${Date.now()}`,
+    projectId: project.id,
+    projectName: project.name,
+    supplierIds: [...project.invitedSuppliers],
+    sendDate: new Date().toISOString(),
+    status: 'pending',
+  }
+
+  inquiryInvitations.value.push(invitation)
+  localStorage.setItem('sourcing_inquiries', JSON.stringify(inquiryInvitations.value))
+
+  // 更新项目状态为"报价中"
+  const projectIndex = projects.value.findIndex(p => p.id === project.id)
+  if (projectIndex >= 0) {
+    projects.value[projectIndex].status = '报价中'
+    projects.value[projectIndex].inquirySentDate = new Date().toISOString()
+    localStorage.setItem('sourcingProjects', JSON.stringify(projects.value))
+  }
+
+  appStore.showToast(`询价单已发送给 ${project.invitedSuppliers.length} 家供应商`, 'success')
+}
+
+// 获取项目的询价单状态
+function getInquiryStatus(project: any) {
+  const invitation = inquiryInvitations.value.find(i => i.projectId === project.id)
+  return invitation ? invitation.status : null
+}
+
+// ==================== 项目进度跟踪功能 ====================
+
+// 项目进度阶段
+function getProjectProgress(project: any) {
+  const stages = [
+    { key: 'created', label: '项目创建', completed: true, date: project.createdAt ? new Date(project.createdAt).toLocaleDateString() : '-' },
+    { key: 'inquiry', label: '发送询价', completed: !!project.inquirySentDate, date: project.inquirySentDate ? new Date(project.inquirySentDate).toLocaleDateString() : '-' },
+    { key: 'quoting', label: '报价收集中', completed: (project.quotedCount || 0) >= (project.supplierCount || 0) && (project.quotedCount || 0) > 0, date: '-' },
+    { key: 'evaluation', label: '评标完成', completed: !!project.evaluationCompleted, date: '-' },
+    { key: 'approval', label: '审批完成', completed: project.status === '已定标' || project.status === '已完成', date: project.finalizeDate ? new Date(project.finalizeDate).toLocaleDateString() : '-' },
+    { key: 'finalized', label: '项目完成', completed: project.status === '已完成', date: '-' },
+  ]
+  return stages
+}
+
+// 获取项目进度百分比
+function getProjectProgressPercent(project: any) {
+  const stages = getProjectProgress(project)
+  const completed = stages.filter(s => s.completed).length
+  return Math.round((completed / stages.length) * 100)
+}
+
+// ==================== 报价有效期提醒功能 ====================
+
+// 即将到期的报价列表
+const expiringQuotations = ref<any[]>([])
+
+// 检查报价有效期
+function checkExpiringQuotations() {
+  const allQuotations = JSON.parse(localStorage.getItem('sourcing_quotations') || '[]')
+  const today = new Date()
+  const warnings: any[] = []
+
+  allQuotations.forEach((q: any) => {
+    if (q.status === 'pending' || q.status === 'reviewing') {
+      const validUntil = new Date(q.validUntil)
+      const diffTime = validUntil.getTime() - today.getTime()
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+      // 7天内到期或已过期
+      if (diffDays <= 7 && diffDays >= -30) {
+        const project = projects.value.find(p => p.id === q.projectId)
+        warnings.push({
+          quoteId: q.id,
+          projectName: project?.name || q.projectId,
+          supplierName: q.supplierName,
+          validUntil: q.validUntil,
+          days: diffDays,
+          status: diffDays < 0 ? 'expired' : diffDays <= 3 ? 'urgent' : 'warning',
+        })
+      }
+    }
+  })
+
+  expiringQuotations.value = warnings
+  return warnings
+}
+
 // 获取状态标签样式
 function getStatusClass(status: string) {
   const statusMap: Record<string, string> = {
@@ -572,6 +694,12 @@ onMounted(() => {
     ]
     localStorage.setItem('sourcingProjects', JSON.stringify(projects.value))
   }
+
+  // 加载询价单记录
+  loadInquiryInvitations()
+
+  // 检查报价有效期
+  checkExpiringQuotations()
 })
 
 // 计算属性
@@ -630,6 +758,29 @@ const pendingApprovals = computed(() => approvals.value.filter(a => a.status ===
         <div class="flex items-center justify-between">
           <div><p class="text-sm text-gray-500">待审批</p><p class="text-2xl font-semibold text-orange-600 mt-1">{{ pendingApprovals.length }}</p></div>
           <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center"><Clock class="w-6 h-6 text-orange-600" /></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 报价有效期提醒 -->
+    <div v-if="expiringQuotations.length > 0" class="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+      <div class="flex items-center gap-3 mb-3">
+        <AlertCircle class="w-5 h-5 text-orange-600" />
+        <h4 class="font-medium text-orange-900">报价有效期提醒</h4>
+      </div>
+      <p class="text-sm text-orange-800 mb-3">以下报价即将到期或已过期，请及时跟进：</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div v-for="warning in expiringQuotations" :key="warning.quoteId" class="p-3 bg-white rounded-lg border" :class="warning.status === 'expired' ? 'border-red-200' : warning.status === 'urgent' ? 'border-orange-200' : 'border-yellow-200'">
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1">
+              <p class="text-sm font-medium text-gray-900">{{ warning.projectName }}</p>
+              <p class="text-xs text-gray-500">{{ warning.supplierName }}</p>
+            </div>
+            <span class="text-xs px-2 py-1 rounded" :class="warning.status === 'expired' ? 'bg-red-100 text-red-700' : warning.status === 'urgent' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'">
+              {{ warning.status === 'expired' ? '已过期' : `${warning.days}天后到期` }}
+            </span>
+          </div>
+          <p class="text-xs text-gray-600">有效期至: {{ warning.validUntil }}</p>
         </div>
       </div>
     </div>
@@ -699,6 +850,9 @@ const pendingApprovals = computed(() => approvals.value.filter(a => a.status ===
                 <button @click="openDetailDialog(project)" class="flex-1 min-w-[60px] px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1">
                   <Eye class="w-3 h-3" />详情
                 </button>
+                <button v-if="project.status === '询价中'" @click="handleSendInquiry(project)" class="flex-1 min-w-[60px] px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 flex items-center justify-center gap-1">
+                  <Send class="w-3 h-3" />发送询价
+                </button>
                 <button @click="openEditDialog(project)" class="flex-1 min-w-[60px] px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1">
                   <Edit class="w-3 h-3" />编辑
                 </button>
@@ -714,6 +868,22 @@ const pendingApprovals = computed(() => approvals.value.filter(a => a.status ===
                 <button @click="handleDeleteProject(project)" class="px-3 py-1.5 border border-red-300 rounded-lg text-xs text-red-600 hover:bg-red-50">
                   <Trash2 class="w-3 h-3" />
                 </button>
+              </div>
+
+              <!-- 项目进度跟踪 -->
+              <div class="mt-3 pt-3 border-t border-gray-100">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-xs font-medium text-gray-700">项目进度</p>
+                  <span class="text-xs font-medium" :class="getProjectProgressPercent(project) >= 80 ? 'text-green-600' : getProjectProgressPercent(project) >= 50 ? 'text-blue-600' : 'text-gray-600'">{{ getProjectProgressPercent(project) }}%</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <div v-for="(stage, idx) in getProjectProgress(project)" :key="stage.key" class="flex-1 flex flex-col items-center">
+                    <div class="w-full h-1 bg-gray-200 rounded-full mb-1">
+                      <div class="h-1 rounded-full transition-all" :class="stage.completed ? 'bg-green-500' : 'bg-gray-300'" :style="stage.completed ? 'width: 100%' : 'width: 0%'"></div>
+                    </div>
+                    <p class="text-xs" :class="stage.completed ? 'text-gray-900' : 'text-gray-400'" :title="stage.date">{{ stage.label }}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -750,7 +920,9 @@ const pendingApprovals = computed(() => approvals.value.filter(a => a.status ===
                   <td class="px-4 py-3">
                     <div class="flex gap-2 flex-wrap">
                       <button @click="openDetailDialog(project)" class="px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50">详情</button>
+                      <button v-if="project.status === '询价中'" @click="handleSendInquiry(project)" class="px-2 py-1 border border-green-300 rounded text-xs text-green-700 hover:bg-green-50">发送询价</button>
                       <button @click="openQuoteDetailDialog(project)" class="px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50">报价</button>
+                      <button v-if="project.status === '待定标'" @click="openEvaluationDialog(project)" class="px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50">评标</button>
                       <button v-if="project.status === '待定标'" @click="openFinalizeDialog(project)" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">定标</button>
                     </div>
                   </td>
@@ -1084,6 +1256,23 @@ const pendingApprovals = computed(() => approvals.value.filter(a => a.status ===
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              <!-- 项目进度跟踪 -->
+              <div>
+                <h4 class="font-medium text-gray-900 mb-3">项目进度 ({{ getProjectProgressPercent(selectedProject) }}%)</h4>
+                <div class="space-y-2">
+                  <div v-for="stage in getProjectProgress(selectedProject)" :key="stage.key" class="flex items-center gap-3">
+                    <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center" :class="stage.completed ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'">
+                      <CheckCircle v-if="stage.completed" class="w-4 h-4" />
+                      <Clock v-else class="w-4 h-4" />
+                    </div>
+                    <div class="flex-1">
+                      <p class="text-sm font-medium text-gray-900">{{ stage.label }}</p>
+                      <p class="text-xs text-gray-500">{{ stage.date }}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

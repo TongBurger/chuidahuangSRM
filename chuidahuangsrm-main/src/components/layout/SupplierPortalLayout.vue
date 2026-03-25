@@ -19,6 +19,7 @@ import {
   Moon,
   LogOut,
   Warehouse,
+  Send,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -30,6 +31,7 @@ const supplierNavigation = [
   { key: 'supplier.portal.orders', href: '/supplier-portal/orders', icon: FileText },
   { key: 'supplier.portal.asn', href: '/supplier-portal/asn', icon: Truck },
   { key: 'supplier.portal.inventory', href: '/supplier-portal/inventory', icon: Warehouse },
+  { key: 'supplier.portal.sourcing', href: '/supplier-portal/sourcing', icon: Send },
   { key: 'supplier.portal.reconciliation', href: '/supplier-portal/reconciliation', icon: Calculator },
   { key: 'supplier.portal.invoice', href: '/supplier-portal/invoice', icon: Receipt },
   { key: 'supplier.portal.performance', href: '/supplier-portal/performance', icon: TrendingUp },
