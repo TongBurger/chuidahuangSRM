@@ -438,6 +438,7 @@ function handleMarkResolved(id: string) {
               质量
             </button>
           </div>
+          </div>
         </div>
 
         <!-- 新增风险预警按钮 -->
