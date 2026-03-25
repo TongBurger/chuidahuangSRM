@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Warehouse, Package, AlertTriangle, TrendingUp, TrendingDown, QrCode, LayoutGrid, List, Plus, Eye, Printer, Scan, BarChart, Edit } from 'lucide-vue-next'
+import { Warehouse, Package, AlertTriangle, TrendingUp, TrendingDown, QrCode, LayoutGrid, List, Plus, Eye, Printer, Scan, BarChart, Edit, Upload, Download, X } from 'lucide-vue-next'
 import { mockVirtualWarehouses, mockASNs } from '@/data/mockData'
 import { useAppStore } from '@/stores/useAppStore'
 
@@ -68,6 +68,12 @@ const newInventory = ref({
   location: '',
   notes: '',
 })
+
+// 上传库存对话框状态
+const isUploadInventoryOpen = ref(false)
+const uploadedFile = ref<File | null>(null)
+const uploadPreview = ref<any[]>([])
+const isProcessingUpload = ref(false)
 
 // 供应商列表
 const suppliers = [
@@ -321,6 +327,171 @@ function handleSaveInventory() {
   isCreateInventoryOpen.value = false
 }
 
+// 打开上传库存对话框
+function openUploadInventoryDialog() {
+  uploadedFile.value = null
+  uploadPreview.value = []
+  isUploadInventoryOpen.value = true
+}
+
+// 处理文件选择
+function handleFileSelect(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  // 验证文件类型
+  const validTypes = [
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+  ]
+  if (!validTypes.includes(file.type) && !file.name.endsWith('.csv') && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+    appStore.showToast('请上传 Excel 或 CSV 文件', 'warning')
+    return
+  }
+
+  uploadedFile.value = file
+  parseUploadedFile(file)
+}
+
+// 解析上传的文件
+function parseUploadedFile(file: File) {
+  isProcessingUpload.value = true
+  const reader = new FileReader()
+
+  reader.onload = (e) => {
+    const content = e.target?.result as string
+    const parsed = parseCSV(content)
+    uploadPreview.value = parsed.slice(0, 10) // 只显示前10条预览
+    isProcessingUpload.value = false
+    appStore.showToast(`成功解析 ${parsed.length} 条库存数据`, 'success')
+  }
+
+  reader.onerror = () => {
+    appStore.showToast('文件解析失败', 'error')
+    isProcessingUpload.value = false
+  }
+
+  reader.readAsText(file, 'GBK') // 尝试 GBK 编码，如果失败会自动回退
+}
+
+// 解析 CSV 内容
+function parseCSV(content: string): any[] {
+  const lines = content.split(/\r?\n/).filter(line => line.trim())
+  if (lines.length < 2) return []
+
+  // 假设第一行是标题，从第二行开始是数据
+  // 支持格式：供应商ID,物料编码,物料名称,理论数量,实际数量,单位,存放位置,备注
+  const result: any[] = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCSVLine(lines[i])
+    if (fields.length >= 4) {
+      const theoreticalQty = parseFloat(fields[3]) || 0
+      const actualQty = parseFloat(fields[4]) || 0
+      const variance = theoreticalQty - actualQty
+      const varianceRate = theoreticalQty > 0 ? parseFloat(((variance / theoreticalQty) * 100).toFixed(2)) : 0
+
+      result.push({
+        supplierId: fields[0] || '',
+        materialCode: fields[1] || '',
+        materialName: fields[2] || '',
+        theoreticalQty,
+        actualQty,
+        variance,
+        varianceRate,
+        unit: fields[5] || '个',
+        location: fields[6] || '',
+        notes: fields[7] || '',
+        valid: !!(fields[0] && fields[1] && fields[2] && theoreticalQty > 0),
+      })
+    }
+  }
+
+  return result
+}
+
+// 解析 CSV 单行（处理引号）
+function parseCSVLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    if (char === '"') {
+      inQuotes = !inQuotes
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  result.push(current.trim())
+
+  return result
+}
+
+// 下载模板
+function downloadTemplate() {
+  const template = `供应商ID,物料编码,物料名称,理论数量,实际数量,单位,存放位置,备注
+S001,M001,模具钢A,100,98,个,A区01号,库存正常
+S002,M002,螺丝M6,500,500,个,B区02号,
+S003,M003,铝板,50,48,张,C区03号,部分已使用`
+
+  const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = '库存导入模板.csv'
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
+
+// 确认上传
+function handleConfirmUpload() {
+  if (uploadPreview.value.length === 0) {
+    appStore.showToast('没有可上传的数据', 'warning')
+    return
+  }
+
+  const validData = uploadPreview.value.filter(item => item.valid)
+  if (validData.length === 0) {
+    appStore.showToast('没有有效数据可上传', 'warning')
+    return
+  }
+
+  // 保存有效数据
+  const saved = localStorage.getItem('virtual_warehouses')
+  let allWarehouses = saved ? JSON.parse(saved) : []
+
+  validData.forEach((item: any) => {
+    const supplier = suppliers.find(s => s.id === item.supplierId)
+    const warehouse = {
+      id: `VW${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      supplierId: item.supplierId,
+      supplierName: supplier?.name || '',
+      materialCode: item.materialCode,
+      materialName: item.materialName,
+      theoreticalQty: item.theoreticalQty,
+      actualQty: item.actualQty,
+      variance: item.variance,
+      varianceRate: item.varianceRate,
+      unit: item.unit,
+      location: item.location,
+      lastUpdateDate: new Date().toISOString().split('T')[0],
+      status: 'normal',
+    }
+    allWarehouses.push(warehouse)
+    mockVirtualWarehouses.push(warehouse)
+  })
+
+  localStorage.setItem('virtual_warehouses', JSON.stringify(allWarehouses))
+  appStore.showToast(`成功导入 ${validData.length} 条库存数据`, 'success')
+  isUploadInventoryOpen.value = false
+}
+
 // 确认供应商上传的库存
 function handleConfirmSupplierInventory(inventoryId: string) {
   const saved = localStorage.getItem('supplier_inventories')
@@ -396,6 +567,9 @@ function handleConfirmSupplierInventory(inventoryId: string) {
             <div class="flex items-center gap-3">
               <button @click="openCreateInventoryDialog" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
                 <Plus class="w-4 h-4" />新增库存
+              </button>
+              <button @click="openUploadInventoryDialog" class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+                <Upload class="w-4 h-4" />批量上传
               </button>
               <select v-model="supplierFilter" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
                 <option value="all">{{ appStore.t('warehouse.allSupplier') }}</option>
@@ -1005,6 +1179,128 @@ function handleConfirmSupplierInventory(inventoryId: string) {
             <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
               <button @click="isCreateInventoryOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
               <button @click="handleSaveInventory" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">保存</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 批量上传库存对话框 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="isUploadInventoryOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/50" @click="isUploadInventoryOpen = false" />
+          <div class="relative bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b">
+              <h3 class="text-lg font-semibold text-gray-900">批量上传库存</h3>
+              <button @click="isUploadInventoryOpen = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+            <div class="p-6 space-y-4 overflow-y-auto flex-1">
+              <!-- 说明和下载模板 -->
+              <div class="p-4 bg-blue-50 rounded-lg">
+                <div class="flex items-start gap-3">
+                  <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Upload class="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div class="flex-1">
+                    <h4 class="font-medium text-blue-900 mb-1">上传说明</h4>
+                    <p class="text-sm text-blue-700 mb-2">请先下载模板，按照模板格式填写库存信息后上传。支持 CSV、Excel 格式文件。</p>
+                    <button @click="downloadTemplate" class="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                      <Download class="w-4 h-4" />下载模板
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 文件上传区域 -->
+              <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  @change="handleFileSelect"
+                  class="hidden"
+                  id="file-upload"
+                  :disabled="isProcessingUpload"
+                />
+                <label for="file-upload" class="cursor-pointer">
+                  <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Upload class="w-8 h-8 text-gray-400" />
+                  </div>
+                  <p class="text-sm text-gray-600 mb-1">点击上传或拖拽文件到此处</p>
+                  <p class="text-xs text-gray-500">支持 CSV、Excel 格式，单次最多导入 1000 条数据</p>
+                </label>
+              </div>
+
+              <!-- 文件信息 -->
+              <div v-if="uploadedFile" class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    <Upload class="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-gray-900">{{ uploadedFile.name }}</p>
+                    <p class="text-xs text-gray-500">{{ (uploadedFile.size / 1024).toFixed(2) }} KB</p>
+                  </div>
+                </div>
+                <button @click="uploadedFile = null; uploadPreview = []" class="p-1 hover:bg-gray-200 rounded">
+                  <X class="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+
+              <!-- 预览表格 -->
+              <div v-if="uploadPreview.length > 0" class="border border-gray-200 rounded-lg overflow-hidden">
+                <div class="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+                  <h4 class="font-medium text-gray-900">数据预览 (前 10 条)</h4>
+                  <span class="text-sm text-gray-500">共 {{ uploadPreview.length }} 条数据</span>
+                </div>
+                <div class="overflow-x-auto max-h-64">
+                  <table class="w-full text-sm">
+                    <thead class="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th class="text-left px-4 py-2 font-medium text-gray-700 whitespace-nowrap">供应商</th>
+                        <th class="text-left px-4 py-2 font-medium text-gray-700 whitespace-nowrap">物料编码</th>
+                        <th class="text-left px-4 py-2 font-medium text-gray-700 whitespace-nowrap">物料名称</th>
+                        <th class="text-right px-4 py-2 font-medium text-gray-700 whitespace-nowrap">理论数量</th>
+                        <th class="text-right px-4 py-2 font-medium text-gray-700 whitespace-nowrap">实际数量</th>
+                        <th class="text-left px-4 py-2 font-medium text-gray-700 whitespace-nowrap">单位</th>
+                        <th class="text-left px-4 py-2 font-medium text-gray-700 whitespace-nowrap">状态</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(item, idx) in uploadPreview" :key="idx" class="border-t border-gray-200" :class="!item.valid ? 'bg-red-50' : ''">
+                        <td class="px-4 py-2 text-gray-900">{{ item.supplierId || '-' }}</td>
+                        <td class="px-4 py-2 text-gray-900 font-mono">{{ item.materialCode || '-' }}</td>
+                        <td class="px-4 py-2 text-gray-900">{{ item.materialName || '-' }}</td>
+                        <td class="px-4 py-2 text-right text-gray-900">{{ item.theoreticalQty || 0 }}</td>
+                        <td class="px-4 py-2 text-right text-gray-900">{{ item.actualQty || 0 }}</td>
+                        <td class="px-4 py-2 text-gray-900">{{ item.unit }}</td>
+                        <td class="px-4 py-2">
+                          <span v-if="item.valid" class="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs">有效</span>
+                          <span v-else class="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs">无效</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- 处理中提示 -->
+              <div v-if="isProcessingUpload" class="flex items-center justify-center py-4">
+                <div class="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
+                <span class="text-sm text-gray-600">正在解析文件...</span>
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 p-4 border-t bg-gray-50">
+              <button @click="isUploadInventoryOpen = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button
+                @click="handleConfirmUpload"
+                :disabled="uploadPreview.length === 0 || isProcessingUpload"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                确认导入 ({{ uploadPreview.filter(i => i.valid).length }} 条有效)
+              </button>
             </div>
           </div>
         </div>
